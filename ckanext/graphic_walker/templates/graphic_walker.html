@@ -1,0 +1,375 @@
+<style>
+  .gw-wrapper {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', Roboto, Oxygen, Ubuntu, sans-serif;
+    position: relative;
+    background: #ffffff;
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.04);
+    overflow: hidden;
+    min-height: 600px;
+  }
+
+  .gw-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 24px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+  }
+
+  .gw-header-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .gw-header-icon {
+    width: 36px;
+    height: 36px;
+    background: rgba(255,255,255,0.2);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(10px);
+  }
+
+  .gw-header-icon svg {
+    width: 20px;
+    height: 20px;
+    fill: white;
+  }
+
+  .gw-header-title {
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  .gw-header-subtitle {
+    font-size: 12px;
+    opacity: 0.8;
+    font-weight: 400;
+  }
+
+  .gw-header-actions {
+    display: flex;
+    gap: 8px;
+  }
+
+  .gw-btn {
+    padding: 6px 14px;
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.3);
+    background: rgba(255,255,255,0.15);
+    color: white;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    backdrop-filter: blur(10px);
+  }
+
+  .gw-btn:hover {
+    background: rgba(255,255,255,0.25);
+    border-color: rgba(255,255,255,0.5);
+  }
+
+  .gw-content {
+    position: relative;
+    min-height: 550px;
+  }
+
+  /* Loading state */
+  .gw-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 500px;
+    gap: 20px;
+  }
+
+  .gw-spinner {
+    width: 48px;
+    height: 48px;
+    border: 3px solid #e5e7eb;
+    border-top-color: #667eea;
+    border-radius: 50%;
+    animation: gw-spin 0.8s linear infinite;
+  }
+
+  @keyframes gw-spin {
+    to { transform: rotate(360deg); }
+  }
+
+  .gw-loading-text {
+    color: #6b7280;
+    font-size: 14px;
+    font-weight: 500;
+  }
+
+  .gw-loading-subtext {
+    color: #9ca3af;
+    font-size: 12px;
+    margin-top: -12px;
+  }
+
+  /* Error state */
+  .gw-error {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 400px;
+    gap: 16px;
+    padding: 40px;
+  }
+
+  .gw-error-icon {
+    width: 56px;
+    height: 56px;
+    background: #fef2f2;
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .gw-error-icon svg {
+    width: 28px;
+    height: 28px;
+    fill: #ef4444;
+  }
+
+  .gw-error-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: #1f2937;
+  }
+
+  .gw-error-message {
+    font-size: 14px;
+    color: #6b7280;
+    text-align: center;
+    max-width: 400px;
+    line-height: 1.5;
+  }
+
+  .gw-retry-btn {
+    padding: 8px 20px;
+    border-radius: 8px;
+    border: 1px solid #e5e7eb;
+    background: white;
+    color: #374151;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .gw-retry-btn:hover {
+    background: #f9fafb;
+    border-color: #d1d5db;
+  }
+
+  /* Stats bar */
+  .gw-stats {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 10px 24px;
+    background: #f9fafb;
+    border-bottom: 1px solid #f3f4f6;
+    font-size: 12px;
+    color: #6b7280;
+  }
+
+  .gw-stat {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .gw-stat-value {
+    font-weight: 600;
+    color: #374151;
+  }
+
+  /* Full width toggle */
+  .gw-wrapper.full-width {
+    border-radius: 0;
+    margin: -15px;
+  }
+
+  /* Override Graphic Walker container styles for better integration */
+  .gw-content > div {
+    min-height: 500px;
+  }
+</style>
+
+<div class="gw-wrapper" id="gw-wrapper">
+  <div class="gw-header">
+    <div class="gw-header-left">
+      <div class="gw-header-icon">
+        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z" fill="currentColor"/>
+        </svg>
+      </div>
+      <div>
+        <div class="gw-header-title">{{ view_title }}</div>
+        <div class="gw-header-subtitle">{{ resource_name }} · {{ resource_format | upper }}</div>
+      </div>
+    </div>
+    <div class="gw-header-actions">
+      <button class="gw-btn" onclick="toggleGWFullWidth()" title="Toggle full width">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 4px;">
+          <path d="M8 3H5a2 2 0 00-2 2v3m18 0V5a2 2 0 00-2-2h-3m0 18h3a2 2 0 002-2v-3M3 16v3a2 2 0 002 2h3"/>
+        </svg>
+        Expand
+      </button>
+    </div>
+  </div>
+
+  <div id="gw-stats" class="gw-stats" style="display: none;">
+    <div class="gw-stat">
+      <span>Rows:</span>
+      <span class="gw-stat-value" id="gw-stat-rows">-</span>
+    </div>
+    <div class="gw-stat">
+      <span>Columns:</span>
+      <span class="gw-stat-value" id="gw-stat-cols">-</span>
+    </div>
+    <div class="gw-stat">
+      <span>Source:</span>
+      <span class="gw-stat-value" id="gw-stat-source">-</span>
+    </div>
+  </div>
+
+  <div class="gw-content" id="gw-content">
+    <div class="gw-loading" id="gw-loading">
+      <div class="gw-spinner"></div>
+      <div class="gw-loading-text">Loading data...</div>
+      <div class="gw-loading-subtext">Preparing your visualization workspace</div>
+    </div>
+
+    <div class="gw-error" id="gw-error" style="display: none;">
+      <div class="gw-error-icon">
+        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+        </svg>
+      </div>
+      <div class="gw-error-title">Unable to load data</div>
+      <div class="gw-error-message" id="gw-error-msg">An unexpected error occurred while loading the dataset.</div>
+      <button class="gw-retry-btn" onclick="gwLoadData()">Try again</button>
+    </div>
+
+    <div id="gw-app" style="display: none;"></div>
+  </div>
+</div>
+
+<script src="/graphic-walker-app/graphic-walker-ckan.js"></script>
+<script>
+(function() {
+  var GW_CONFIG = {
+    resourceId: '{{ resource_id }}',
+    apiUrl: '{{ api_url }}',
+    maxRows: {{ max_rows }},
+    resourceName: '{{ resource_name }}',
+  };
+
+  function showLoading() {
+    document.getElementById('gw-loading').style.display = 'flex';
+    document.getElementById('gw-error').style.display = 'none';
+    document.getElementById('gw-app').style.display = 'none';
+  }
+
+  function showError(msg) {
+    document.getElementById('gw-loading').style.display = 'none';
+    document.getElementById('gw-error').style.display = 'flex';
+    document.getElementById('gw-app').style.display = 'none';
+    document.getElementById('gw-error-msg').textContent = msg || 'An unexpected error occurred.';
+  }
+
+  function showApp(stats) {
+    document.getElementById('gw-loading').style.display = 'none';
+    document.getElementById('gw-error').style.display = 'none';
+    document.getElementById('gw-app').style.display = 'block';
+
+    if (stats) {
+      document.getElementById('gw-stats').style.display = 'flex';
+      document.getElementById('gw-stat-rows').textContent = stats.rows.toLocaleString();
+      document.getElementById('gw-stat-cols').textContent = stats.cols;
+      document.getElementById('gw-stat-source').textContent = stats.source === 'datastore' ? 'DataStore' : 'CSV File';
+    }
+  }
+
+  window.gwLoadData = function() {
+    showLoading();
+
+    fetch(GW_CONFIG.apiUrl)
+      .then(function(resp) { return resp.json(); })
+      .then(function(result) {
+        if (!result.success) {
+          showError(result.error || 'Failed to load data.');
+          return;
+        }
+
+        var data = result.data;
+        var fields = result.fields;
+
+        if (!data || data.length === 0) {
+          showError('No data found in this resource.');
+          return;
+        }
+
+        var gwFields = fields.map(function(f) {
+          return {
+            fid: f.fid,
+            name: f.name,
+            semanticType: f.semanticType || 'nominal',
+            analyticType: f.analyticType || 'dimension',
+          };
+        });
+
+        showApp({
+          rows: result.total || data.length,
+          cols: fields.length,
+          source: result.source,
+        });
+
+        if (window.GraphicWalkerCKAN && window.GraphicWalkerCKAN.render) {
+          window.GraphicWalkerCKAN.render(
+            document.getElementById('gw-app'),
+            data,
+            gwFields
+          );
+        } else {
+          showError('Graphic Walker library failed to load. Please refresh the page.');
+        }
+      })
+      .catch(function(err) {
+        console.error('[graphic_walker] Load error:', err);
+        showError('Network error loading data: ' + err.message);
+      });
+  };
+
+  window.toggleGWFullWidth = function() {
+    var wrapper = document.getElementById('gw-wrapper');
+    wrapper.classList.toggle('full-width');
+
+    var containers = document.querySelectorAll('.container, .container-fluid');
+    containers.forEach(function(c) {
+      c.classList.toggle('gw-expanded');
+    });
+  };
+
+  // Auto-load on page ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', gwLoadData);
+  } else {
+    gwLoadData();
+  }
+})();
+</script>
