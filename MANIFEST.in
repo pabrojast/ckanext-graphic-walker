@@ -1,6 +1,6 @@
 include README.md
 include LICENSE
 include requirements.txt
+recursive-include ckanext/graphic_walker *.py
 recursive-include ckanext/graphic_walker/templates *
 recursive-include ckanext/graphic_walker/public *
-recursive-include ckanext/graphic_walker/fanstatic *

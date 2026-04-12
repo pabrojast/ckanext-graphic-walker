@@ -2,6 +2,7 @@
 """
 CKAN plugin for interactive CSV visualization using Graphic Walker.
 """
+import json
 import ckan.plugins as plugins
 import ckan.plugins.toolkit as toolkit
 import os
@@ -42,6 +43,7 @@ class GraphicWalkerPlugin(plugins.SingletonPlugin):
 
     plugins.implements(plugins.IResourceView, inherit=True)
     def info(self):
+        ignore_missing = toolkit.get_validator('ignore_missing')
         return {
             'name': PLUGIN_NAME,
             'title': toolkit._('Graphic Walker'),
@@ -50,7 +52,9 @@ class GraphicWalkerPlugin(plugins.SingletonPlugin):
             'always_available': False,
             'filterable': True,
             'iframed': False,
-            'default_title': toolkit._(self.default_title),
+            'schema': {
+                'chart_specs': [ignore_missing],
+            },
         }
 
     def can_view(self, data_dict):
@@ -62,13 +66,29 @@ class GraphicWalkerPlugin(plugins.SingletonPlugin):
         resource = data_dict['resource']
         view = data_dict.get('resource_view', {})
 
+        saved_specs = view.get('chart_specs', '')
+        if saved_specs and isinstance(saved_specs, str):
+            try:
+                json.loads(saved_specs)
+            except (json.JSONDecodeError, TypeError):
+                saved_specs = ''
+
+        user = context.get('user', '') or ''
+        try:
+            user = toolkit.c.user or ''
+        except Exception:
+            pass
+
         return {
             'resource_id': resource.get('id', ''),
             'resource_name': resource.get('name', 'Dataset'),
             'resource_format': resource.get('format', 'CSV'),
             'view_title': view.get('title', self.default_title),
+            'view_id': view.get('id', ''),
             'max_rows': self.max_rows,
             'api_url': f'/api/graphic_walker/data/{resource.get("id", "")}',
+            'chart_specs': saved_specs,
+            'user': user,
         }
 
     def view_template(self, context, data_dict):

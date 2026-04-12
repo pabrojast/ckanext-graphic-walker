@@ -276,3 +276,74 @@ def get_resource_data(resource_id):
         'success': False,
         'error': 'Could not load data from this resource. Ensure it is a valid CSV file.',
     }), 404
+
+
+@graphic_walker_api.route('/api/graphic_walker/view/<view_id>/save-spec', methods=['POST'])
+def save_view_specs(view_id):
+    """
+    Save chart specifications to a resource view's config.
+    Expects JSON body: {"specs": "...json string..."}
+    """
+    try:
+        from flask import g
+        user = None
+        try:
+            user = toolkit.c.user or None
+        except Exception:
+            user = getattr(g, 'user', None) if hasattr(g, 'user') else None
+
+        if not user:
+            return jsonify({'success': False, 'error': 'Authentication required. Please log in.'}), 401
+
+        data = request.get_json(silent=True)
+        if not data or 'specs' not in data:
+            return jsonify({'success': False, 'error': 'Missing "specs" field in request body.'}), 400
+
+        specs = data['specs']
+        if not isinstance(specs, str):
+            try:
+                specs = json.dumps(specs)
+            except (TypeError, ValueError):
+                return jsonify({'success': False, 'error': 'Invalid specs format.'}), 400
+
+        # Validate it's valid JSON
+        try:
+            json.loads(specs)
+        except (json.JSONDecodeError, TypeError):
+            return jsonify({'success': False, 'error': 'Specs must be valid JSON.'}), 400
+
+        context = {'user': user, 'ignore_auth': False}
+
+        try:
+            current_view = toolkit.get_action('resource_view_show')(context, {'id': view_id})
+        except toolkit.ObjectNotFound:
+            return jsonify({'success': False, 'error': f'View not found: {view_id}'}), 404
+        except toolkit.NotAuthorized:
+            return jsonify({'success': False, 'error': 'Not authorized to access this view.'}), 403
+
+        update_data = {
+            'id': view_id,
+            'resource_id': current_view.get('resource_id'),
+            'view_type': current_view.get('view_type'),
+            'title': current_view.get('title'),
+            'description': current_view.get('description', ''),
+            'chart_specs': specs,
+        }
+
+        try:
+            toolkit.get_action('resource_view_update')(context, update_data)
+        except toolkit.NotAuthorized:
+            return jsonify({'success': False, 'error': 'Not authorized to update this view.'}), 403
+        except Exception as e:
+            return jsonify({'success': False, 'error': f'Failed to save: {str(e)}'}), 500
+
+        return jsonify({
+            'success': True,
+            'message': 'Chart configuration saved successfully.',
+            'view_id': view_id,
+        })
+
+    except Exception as e:
+        if os.getenv("GW_DEBUG", "false").lower() == "true":
+            print(f"[graphic_walker] Save error: {e}")
+        return jsonify({'success': False, 'error': f'Server error: {str(e)}'}), 500
