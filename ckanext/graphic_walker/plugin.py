@@ -67,11 +67,12 @@ class GraphicWalkerPlugin(plugins.SingletonPlugin):
         view = data_dict.get('resource_view', {})
 
         saved_specs = view.get('chart_specs', '')
+        chart_specs = None
         if saved_specs and isinstance(saved_specs, str):
             try:
-                json.loads(saved_specs)
+                chart_specs = json.loads(saved_specs)
             except (json.JSONDecodeError, TypeError):
-                saved_specs = ''
+                chart_specs = None
 
         user = context.get('user', '') or ''
         try:
@@ -87,7 +88,7 @@ class GraphicWalkerPlugin(plugins.SingletonPlugin):
             'view_id': view.get('id', ''),
             'max_rows': self.max_rows,
             'api_url': f'/api/graphic_walker/data/{resource.get("id", "")}',
-            'chart_specs': saved_specs,
+            'chart_specs_json': json.dumps(chart_specs) if chart_specs else 'null',
             'user': user,
         }
 

@@ -334,18 +334,8 @@
     maxRows: {{ max_rows }},
     resourceName: '{{ resource_name }}',
     viewId: '{{ view_id }}',
-    savedSpecs: null,
+    savedSpecs: {{ chart_specs_json | safe }},
   };
-
-  // Parse saved chart specs if available
-  try {
-    var rawSpecs = '{{ chart_specs | e }}';
-    if (rawSpecs && rawSpecs !== '' && rawSpecs !== 'None') {
-      GW_CONFIG.savedSpecs = JSON.parse(rawSpecs);
-    }
-  } catch (e) {
-    console.warn('[graphic_walker] Could not parse saved specs:', e);
-  }
 
   function showLoading() {
     document.getElementById('gw-loading').style.display = 'flex';
