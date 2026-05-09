@@ -25,6 +25,52 @@ def _get_max_rows():
         return 50000
 
 
+def _debug(msg):
+    if os.getenv("GW_DEBUG", "false").lower() == "true":
+        print(f"[graphic_walker] {msg}")
+
+
+def _current_user():
+    """Return the username of the requesting user, or empty string."""
+    try:
+        return toolkit.c.user or ''
+    except Exception:
+        pass
+    try:
+        from flask import g
+        return getattr(g, 'user', '') or ''
+    except Exception:
+        return ''
+
+
+def _authorize_resource(resource_id):
+    """
+    Verify that the requesting user is allowed to view this resource.
+    Returns (resource_dict, error_response_tuple).
+    On success: (dict, None). On failure: (None, (json_response, status_code)).
+    """
+    user = _current_user()
+    context = {'user': user, 'ignore_auth': False}
+    try:
+        resource = toolkit.get_action('resource_show')(context, {'id': resource_id})
+        return resource, None
+    except toolkit.ObjectNotFound:
+        return None, (jsonify({
+            'success': False,
+            'error': 'Resource not found.',
+        }), 404)
+    except toolkit.NotAuthorized:
+        if not user:
+            return None, (jsonify({
+                'success': False,
+                'error': 'Authentication required to view this resource.',
+            }), 401)
+        return None, (jsonify({
+            'success': False,
+            'error': 'Not authorized to view this resource.',
+        }), 403)
+
+
 def _try_datastore(resource_id, max_rows):
     """Try to fetch data from CKAN DataStore API."""
     try:
@@ -83,57 +129,129 @@ def _infer_analytic_type_from_datastore(ds_type):
     return 'dimension'
 
 
-def _try_direct_csv(resource_id, max_rows):
-    """Fall back to downloading the CSV file directly."""
+def _read_local_upload(uploader, resource_id):
+    """Read content from a local-disk uploader. Returns str or None."""
     try:
-        import ckan.model as model
-        resource = model.Resource.get(resource_id)
-        if not resource:
-            return None, None, None
+        if not hasattr(uploader, 'get_path'):
+            return None
+        upload_path = uploader.get_path(resource_id)
+        if not upload_path or not os.path.exists(upload_path):
+            return None
+        with open(upload_path, 'rb') as f:
+            raw = f.read()
+        return raw.decode('utf-8', errors='replace')
+    except Exception as e:
+        _debug(f"local upload read failed: {e}")
+        return None
 
-        resource_url = resource.url
-        if not resource_url:
+
+def _read_cloud_upload(uploader, resource_dict):
+    """
+    Read content from a non-local uploader (e.g. ckanext-cloudstorage,
+    ckanext-s3filestore). Tries several strategies in order of robustness:
+      1. Direct libcloud container/object stream — works for private blobs
+         regardless of whether signed URLs are enabled.
+      2. Uploader's `download` method (returns a Flask response).
+      3. Uploader's `get_url_from_filename` (signed URL we then fetch).
+    Returns str or None.
+    """
+    rid = resource_dict.get('id')
+    filename = resource_dict.get('url') or ''
+    if filename:
+        # CKAN sometimes stores the full URL in `url` for uploads; keep just
+        # the basename which is what cloud uploaders expect.
+        filename = filename.rsplit('/', 1)[-1]
+
+    # 1. libcloud direct read (ckanext-cloudstorage)
+    container = getattr(uploader, 'container', None)
+    if container is not None and rid and filename:
+        try:
+            path_method = getattr(uploader, 'path_from_filename', None)
+            object_name = path_method(rid, filename) if path_method else f'resources/{rid}/{filename}'
+            obj = container.get_object(object_name=object_name)
+            chunks = []
+            for chunk in container.download_object_as_stream(obj):
+                if isinstance(chunk, str):
+                    chunk = chunk.encode('utf-8', errors='replace')
+                chunks.append(chunk)
+            raw = b''.join(chunks)
+            return raw.decode('utf-8', errors='replace')
+        except Exception as e:
+            _debug(f"libcloud direct read failed: {e}")
+
+    # 2. Uploader's download method
+    if hasattr(uploader, 'download'):
+        try:
+            resp = uploader.download(rid, filename) if filename else uploader.download(rid)
+            data = getattr(resp, 'data', None)
+            if data is None and hasattr(resp, 'get_data'):
+                data = resp.get_data()
+            if isinstance(data, bytes):
+                return data.decode('utf-8', errors='replace')
+            if isinstance(data, str):
+                return data
+        except Exception as e:
+            _debug(f"uploader.download failed: {e}")
+
+    # 3. Signed/public URL
+    if hasattr(uploader, 'get_url_from_filename') and rid and filename:
+        try:
+            signed_url = uploader.get_url_from_filename(rid, filename)
+            if signed_url:
+                return _http_get_text(signed_url)
+        except Exception as e:
+            _debug(f"get_url_from_filename failed: {e}")
+
+    return None
+
+
+def _http_get_text(url, headers=None, timeout=60):
+    """GET a URL and return the body as text, or None on failure."""
+    try:
+        import urllib.request
+        req = urllib.request.Request(url, headers=headers or {})
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return resp.read().decode('utf-8', errors='replace')
+    except Exception as e:
+        _debug(f"http get failed for {url}: {e}")
+        return None
+
+
+def _try_direct_csv(resource_dict, max_rows):
+    """Fall back to downloading the CSV file directly.
+
+    `resource_dict` is the dict returned by resource_show — the caller is
+    expected to have already authorized the user.
+    """
+    try:
+        resource_id = resource_dict.get('id')
+        resource_url = resource_dict.get('url') or ''
+        url_type = resource_dict.get('url_type') or ''
+
+        if not resource_id:
             return None, None, None
 
         content = None
 
-        # Try to get from local upload first
-        try:
-            from ckan.lib.uploader import get_resource_uploader
-            uploader = get_resource_uploader(resource.as_dict())
-            if hasattr(uploader, 'get_path'):
-                upload_path = uploader.get_path(resource.id)
-                if upload_path and os.path.exists(upload_path):
-                    with open(upload_path, 'r', encoding='utf-8', errors='replace') as f:
-                        content = f.read()
-        except Exception:
-            pass
-
-        # Try the CKAN internal download URL (works for cloud storage uploads)
-        if content is None and resource.url_type == 'upload':
+        # For uploaded files, use the configured uploader rather than HTTP
+        # so we don't have to worry about authentication for private files.
+        if url_type == 'upload':
             try:
-                import urllib.request
-                site_url = toolkit.config.get('ckan.site_url', '').rstrip('/')
-                if not site_url:
-                    site_url = 'http://localhost:5000'
-                download_url = '{}/dataset/{}/resource/{}/download/{}'.format(
-                    site_url, resource.package_id, resource.id, resource.url
-                )
-                req = urllib.request.Request(download_url)
-                with urllib.request.urlopen(req, timeout=60) as resp:
-                    content = resp.read().decode('utf-8', errors='replace')
-            except Exception:
-                pass
+                from ckan.lib.uploader import get_resource_uploader
+                uploader = get_resource_uploader(resource_dict)
+            except Exception as e:
+                _debug(f"get_resource_uploader failed: {e}")
+                uploader = None
 
-        # Try the resource URL directly (external URLs)
+            if uploader is not None:
+                content = _read_local_upload(uploader, resource_id)
+                if content is None:
+                    content = _read_cloud_upload(uploader, resource_dict)
+
+        # External URL: fetch directly. This won't help if the URL itself
+        # requires auth, but at least public external CSVs work.
         if content is None and resource_url.startswith(('http://', 'https://')):
-            try:
-                import urllib.request
-                req = urllib.request.Request(resource_url)
-                with urllib.request.urlopen(req, timeout=30) as resp:
-                    content = resp.read().decode('utf-8', errors='replace')
-            except Exception:
-                pass
+            content = _http_get_text(resource_url, timeout=30)
 
         if content is None:
             return None, None, None
@@ -141,8 +259,7 @@ def _try_direct_csv(resource_id, max_rows):
         return _parse_csv_content(content, max_rows)
 
     except Exception as e:
-        if os.getenv("GW_DEBUG", "false").lower() == "true":
-            print(f"[graphic_walker] CSV download error: {e}")
+        _debug(f"CSV download error: {e}")
         return None, None, None
 
 
@@ -243,8 +360,20 @@ def get_resource_data(resource_id):
     """
     Serve resource data as JSON for Graphic Walker frontend.
     Tries DataStore API first, falls back to direct CSV download.
+
+    Authorization: the requesting user must be allowed to view the resource
+    (resource_show). Once they are, we use ignore_auth=True internally so
+    that data backends (datastore, file uploader) work consistently for
+    both public and private resources.
     """
     max_rows = _get_max_rows()
+
+    # Enforce auth: a user that cannot resource_show this resource should
+    # not be able to read its data via this endpoint either.
+    resource, err = _authorize_resource(resource_id)
+    if err is not None:
+        body, status = err
+        return body, status
 
     # Try DataStore first
     records, fields, total = _try_datastore(resource_id, max_rows)
@@ -259,8 +388,8 @@ def get_resource_data(resource_id):
             'max_rows': max_rows,
         })
 
-    # Fall back to direct CSV
-    records, fields, total = _try_direct_csv(resource_id, max_rows)
+    # Fall back to direct CSV (uploader-based, works for private files too)
+    records, fields, total = _try_direct_csv(resource, max_rows)
 
     if records is not None:
         return jsonify({
