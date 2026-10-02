@@ -402,9 +402,11 @@
 
     var specsJson = JSON.stringify(specs);
 
+    var csrfMeta = document.querySelector('meta[name="_csrf_token"], meta[name="csrf_token"]');
     fetch('/api/graphic_walker/view/' + GW_CONFIG.viewId + '/save-spec', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfMeta ? csrfMeta.getAttribute('content') : '' },
+      credentials: 'same-origin',
       body: JSON.stringify({ specs: specsJson }),
     })
     .then(function(resp) { return resp.json(); })

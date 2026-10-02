@@ -205,13 +205,69 @@ def _read_cloud_upload(uploader, resource_dict):
     return None
 
 
-def _http_get_text(url, headers=None, timeout=60):
-    """GET a URL and return the body as text, or None on failure."""
+def _get_max_bytes():
+    """Largest external file the data endpoint will download (default 50 MiB)."""
     try:
-        import urllib.request
+        return int(toolkit.config.get('ckanext.graphic_walker.max_bytes', str(50 * 1024 * 1024)))
+    except (TypeError, ValueError):
+        return 50 * 1024 * 1024
+
+
+def _public_url(url):
+    """Allow only http(s) URLs on standard ports whose hosts resolve to public
+    addresses (no loopback, link-local or private ranges): the endpoint fetches
+    on behalf of any user, so it must not reach internal services."""
+    import ipaddress
+    import socket
+    from urllib.parse import urlsplit
+    parsed = urlsplit(url)
+    if parsed.scheme not in ('http', 'https') or not parsed.hostname or parsed.username or parsed.password:
+        return False
+    port = parsed.port or (443 if parsed.scheme == 'https' else 80)
+    if port not in (80, 443):
+        return False
+    try:
+        infos = socket.getaddrinfo(parsed.hostname, port, type=socket.SOCK_STREAM)
+        ips = {row[4][0] for row in infos}
+    except (OSError, UnicodeError):
+        return False
+    return bool(ips) and all(ipaddress.ip_address(ip).is_global for ip in ips)
+
+
+def _http_get_text(url, headers=None, timeout=60, max_bytes=None, trusted=False):
+    """GET a URL and return the body as text, or None on failure.
+
+    External URLs must pass `_public_url` (also on every redirect) and are
+    read up to `max_bytes`. `trusted=True` skips the address check for the
+    site's own download endpoint."""
+    import urllib.request
+    import urllib.error
+    max_bytes = max_bytes or _get_max_bytes()
+
+    class _Redirects(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, req, fp, code, msg, hdrs, newurl):
+            if not trusted and not _public_url(newurl):
+                raise urllib.error.HTTPError(newurl, 403, 'redirect to a non-public address', hdrs, fp)
+            return super().redirect_request(req, fp, code, msg, hdrs, newurl)
+
+    try:
+        if not trusted and not _public_url(url):
+            _debug(f"refusing to fetch non-public url {url}")
+            return None
         req = urllib.request.Request(url, headers=headers or {})
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            return resp.read().decode('utf-8', errors='replace')
+        opener = urllib.request.build_opener(_Redirects())
+        with opener.open(req, timeout=timeout) as resp:
+            chunks, total = [], 0
+            while True:
+                chunk = resp.read(1024 * 1024)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > max_bytes:
+                    _debug(f"{url}: larger than {max_bytes} bytes, truncated")
+                    break
+                chunks.append(chunk)
+            return b''.join(chunks).decode('utf-8', errors='replace')
     except Exception as e:
         _debug(f"http get failed for {url}: {e}")
         return None
